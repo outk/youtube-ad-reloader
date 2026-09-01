@@ -19,21 +19,25 @@ window.addEventListener('load', () => {
     // ライブ配信の場合は最新位置にスクロール
     setTimeout(jumpToLiveEdge, 1500);
   } else {
-    // 通常動画の場合は保存しておいた再生時間を復元
+    // 通常動画の場合は保存しておいた再生時間を復元して再生開始
     const savedTime = sessionStorage.getItem('yt_saved_video_time');
     if (savedTime !== null) {
       const targetTime = parseFloat(savedTime);
-      sessionStorage.removeItem('yt_saved_video_time'); // 一度使用したら削除
+      sessionStorage.removeItem('yt_saved_video_time');
 
-      const restoreTime = () => {
+      const restoreTimeAndPlay = () => {
         const video = document.querySelector('video');
         if (video && !isNaN(video.duration)) {
           video.currentTime = targetTime;
+          // 明示的に再生を開始
+          video.play().catch(err => {
+            console.log('自動再生がブロックされたため、ユーザー操作が必要です:', err);
+          });
         } else {
-          setTimeout(restoreTime, 200); // 動画要素が読み込まれるまで再試行
+          setTimeout(restoreTimeAndPlay, 200);
         }
       };
-      restoreTime();
+      restoreTimeAndPlay();
     }
   }
 });
