@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Ad Auto Reloader & Live Sync",
+  "version": "1.0.0",
+  "description": "YouTubeで広告が検出された際に自動でページをリロードし、ライブ配信時は最新位置に同期します。",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
