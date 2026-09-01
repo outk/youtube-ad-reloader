@@ -1,83 +1,71 @@
-let isReloading = false;
+// 広告リロード用の目印キー
+const RELOAD_FLAG_KEY = 'yt_ad_reloaded_flag';
 
-// ライブ配信の場合に「ライブ（最新）」ボタンを押して追いつかせる処理
-function jumpToLiveEdge() {
-  const video = document.querySelector('video');
-  const liveBadge = document.querySelector('.ytp-live-badge');
+// 1. 広告を検知してリロードする処理
+function checkAdAndReload() {
+  const player = document.querySelector('.html5-video-player');
+  if (!player) return;
 
-  if (video && liveBadge && !liveBadge.classList.contains('ytp-live-badge-disabled')) {
-    liveBadge.click();
+  // 広告が表示されているか判定
+  const isAdShowing = player.classList.contains('ad-showing') || 
+                      player.classList.contains('ad-interrupting');
+
+  if (isAdShowing) {
+    console.log('広告を検知しました。リロードを実行します。');
+    // リロード直前にセッションストレージにフラグを保存
+    sessionStorage.setItem(RELOAD_FLAG_KEY, 'true');
+    // ページを再読み込み
+    location.reload();
   }
 }
 
-// ページ読み込み完了後に再生位置を復元（またはライブへ移動）
-window.addEventListener('load', () => {
-  const liveBadge = document.querySelector('.ytp-live-badge');
-  const isLive = liveBadge && !liveBadge.classList.contains('ytp-live-badge-disabled');
+// 2. リロード後に動画が止まっていたら強制的に再開する処理
+function forceResumeVideo() {
+  // リロード直後かどうかを判定
+  if (sessionStorage.getItem(RELOAD_FLAG_KEY) === 'true') {
+    // 処理開始時にフラグを消去（無限ループ防止）
+    sessionStorage.removeItem(RELOAD_FLAG_KEY);
+    
+    let attempts = 0;
+    
+    // 0.5秒ごとに動画の状態を監視し、止まっていれば動かす
+    const resumeInterval = setInterval(() => {
+      attempts++;
+      const video = document.querySelector('video');
+      const playButton = document.querySelector('.ytp-play-button');
 
-  if (isLive) {
-    // ライブ配信の場合は最新位置にスクロール
-    setTimeout(jumpToLiveEdge, 1500);
-  } else {
-    // 通常動画の場合は保存しておいた再生時間を復元して再生開始
-    const savedTime = sessionStorage.getItem('yt_saved_video_time');
-    if (savedTime !== null) {
-      const targetTime = parseFloat(savedTime);
-      sessionStorage.removeItem('yt_saved_video_time');
-
-      const restoreTimeAndPlay = () => {
-        const video = document.querySelector('video');
-        if (video && !isNaN(video.duration)) {
-          video.currentTime = targetTime;
-          // 明示的に再生を開始
-          video.play().catch(err => {
-            console.log('自動再生がブロックされたため、ユーザー操作が必要です:', err);
+      if (video && video.readyState >= 2) { 
+        if (video.paused) {
+          // パターンA: プログラムから直接再生を命令
+          video.play().then(() => {
+            console.log('動画の自動再開に成功しました。');
+            clearInterval(resumeInterval);
+          }).catch((error) => {
+            console.log('Chromeの自動再生ブロックが働きました。ボタンクリックを試行します。', error);
+            // パターンB: ブロックされた場合は、画面上の「再生ボタン」を強制クリック
+            if (playButton) {
+              playButton.click();
+            }
           });
         } else {
-          setTimeout(restoreTimeAndPlay, 200);
+          // すでに再生状態になっていれば監視を終了
+          console.log('動画の再生を確認しました。');
+          clearInterval(resumeInterval);
         }
-      };
-      restoreTimeAndPlay();
-    }
-  }
-});
-
-// 広告要素の検出とリロード処理
-function checkForAds() {
-  if (isReloading) return;
-
-  const player = document.querySelector('.html5-video-player');
-  
-  if (player) {
-    const isAdShowing = player.classList.contains('ad-showing') || 
-                        player.classList.contains('ad-interrupting');
-
-    if (isAdShowing) {
-      isReloading = true;
-
-      const video = document.querySelector('video');
-      const liveBadge = document.querySelector('.ytp-live-badge');
-      const isLive = liveBadge && !liveBadge.classList.contains('ytp-live-badge-disabled');
-
-      // 通常動画の場合は現在の再生時間を一時保存
-      if (video && !isLive) {
-        sessionStorage.setItem('yt_saved_video_time', video.currentTime.toString());
       }
 
-      console.log('広告を検出しました。ページをリロードします...');
-      location.reload();
-    }
+      // 10秒（20回）試してもダメなら、エラーを防ぐため監視を諦める
+      if (attempts >= 20) {
+        clearInterval(resumeInterval);
+      }
+    }, 500);
   }
 }
 
-// DOMの変化を継続的に監視
-const observer = new MutationObserver(() => {
-  checkForAds();
-});
+// === 拡張機能の実行開始 ===
 
-observer.observe(document.body, {
-  childList: true,
-  subtree: true,
-  attributes: true,
-  attributeFilter: ['class']
-});
+// ページ読み込み時に「リロード後の再開処理」を起動
+forceResumeVideo();
+
+// 通常の広告監視ループ（0.5秒間隔）
+setInterval(checkAdAndReload, 500);
